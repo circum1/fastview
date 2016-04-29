@@ -21,7 +21,7 @@ $(document).ready(function() {
     });
 
     if (window.location.href.indexOf("#")<0) {
-        window.location+="#dir=/localfs/";
+        window.location+="#dir=/pictures/";
     }
 
     $(window).trigger( 'hashchange' );

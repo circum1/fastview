@@ -4,7 +4,7 @@ import (
     "fmt"
     "net/http"
     "time"
-    "github.com/tonnerre/golang-pretty"
+    //~ "github.com/tonnerre/golang-pretty"
     "path"
     "strings"
     "os"
@@ -28,14 +28,14 @@ type Config struct {
 
 // local directories to serve
 var localDirsMap = map[string]string {
-    "/pictures": "/home/fery/Pictures"
+    "/pictures": "/home/fery/Pictures",
 }
 
-var localDirsMapReverse = new map[string]string
+//~ var localDirsMapReverse = new map[string]string
 
 var config = Config {
     //~ "/home/fery/Pictures",
-    "/home/fery/magan/fastview/fastview/data/cache"
+    "/home/fery/magan/fastview/fastview/data/cache",
 }
 
 
@@ -51,6 +51,21 @@ func (i Image) x(){
 
 }
 
+type Cache struct {
+    contentPath string
+    lastMod time.Time
+    // the longer dimension
+    resolution int
+    cachePath string
+}
+
+// Map of URL Path -> Image
+var imagesMap map[string]Image = make(map[string]Image)
+
+func sendErr(w http.ResponseWriter, error string) {
+    fmt.Fprint(w, error);
+}
+
 // ContentProvider & implementers
 
 type ContentProvider interface{
@@ -62,7 +77,7 @@ type ContentProvider interface{
 
 type LocalFilesystemProvider struct {
     // base of url path
-    baseUrl string,
+    baseUrl string
     // base directory
     baseDir string
 }
@@ -84,34 +99,16 @@ func (cp *LocalFilesystemProvider) Url2Path(url string) string {
     return path.Join(cp.baseDir, url)
 }
 
-var contentProvider ContentProvider = &LocalFilesystemProvider{}
-
-type Cache struct {
-    contentPath string
-    lastMod time.Time
-    // the longer dimension
-    resolution int
-    cachePath string
-}
-
-// Map of URL Path -> Image
-var imagesMap map[string]Image = make(map[string]Image)
-
-func sendErr(w http.ResponseWriter, error string) {
-    fmt.Fprint(w, error);
-}
-
-func serveDir(abspath string, w http.ResponseWriter, r *http.Request) {
-	files, err := ioutil.ReadDir(abspath)
+func (cp *LocalFilesystemProvider) serveDir(urlPath string, fsPath string, w http.ResponseWriter, r *http.Request) {
+	files, err := ioutil.ReadDir(fsPath)
 	if err != nil {
 		sendErr(w, err.Error())
 	}
     filenames := make([]string, 0, len(files))
     dirnames := make([]string, 0, len(files))
 	for _, file := range files {
-        fullPath := path.Join(abspath, file.Name())
-        url := fmt.Sprintf("\"%v\"", contentProvider.Path2Url(fullPath))
-        fstat, _ := os.Stat(fullPath)
+        url := fmt.Sprintf("\"%v\"", path.Join(urlPath, file.Name()))
+        fstat, _ := os.Stat(path.Join(fsPath, file.Name()))
         if fstat.IsDir() {
             dirnames=append(dirnames, url)
         } else {
@@ -123,14 +120,14 @@ func serveDir(abspath string, w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
 }
 
-func serveSingleImage(abspath string, w http.ResponseWriter, r *http.Request) {
+func (cp *LocalFilesystemProvider) serveSingleImage(abspath string, w http.ResponseWriter, r *http.Request) {
     size := r.FormValue("size")
     if len(size)==0 || size=="full" {
         http.ServeFile(w, r, abspath)
         return
     }
     if size=="med" {
-        fullpath := path.join(config.cacheDir, contentProvider.Path2Url(abspath))
+        fullpath := path.Join(config.cacheDir, cp.Path2Url(abspath))
         dirname := path.Dir(fullpath)
         if err := os.MkdirAll(dirname, 0644); err != nil {
             fmt.Fprintf(os.Stderr, "error creating cache directory: %v", )
@@ -148,38 +145,26 @@ func serveSingleImage(abspath string, w http.ResponseWriter, r *http.Request) {
 // put to the response in JSON
 //
 // If the request points to an image, the image itself is put to the response.
-func serveLocal(w http.ResponseWriter, r *http.Request) {
-    fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
-    //~ relpath := r.URL.Path
-    //~ if len(relpath)<=len(imageBaseUrl) {
-        //~ relpath="."
-    //~ } else {
-        //~ relpath=path.Clean(relpath[len(imageBaseUrl):])
-        //~ if strings.ContainsAny(relpath[:1], "./") {
-            //~ fmt.Fprintf(w, "invalid URL")
-            //~ return
-        //~ }
-    //~ }
-    //~ abspath := path.Join(config.localImageBaseDir, relpath)
+func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *http.Request) {
+    //~ fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
 
     cleanedPath := path.Clean(r.URL.Path)
-    abspath := contentProvider.Url2Path(cleanedPath)
-    fmt.Printf("cleanedPath: %v\nabspath: %v\n", cleanedPath, abspath)
+    abspath := cp.Url2Path(cleanedPath)
+    fmt.Printf("cleanedPath: %v\nfs path: %v\n", cleanedPath, abspath)
     if len(abspath)==0 {
         fmt.Fprintf(w, "invalid URL")
         return
     }
 
-    //~ fmt.Printf("abspath: %v\n", abspath)
     fstat, err := os.Stat(abspath)
 	if err != nil {
         fmt.Fprintf(w, "Bad path")
         return
     }
     if fstat.IsDir() {
-        serveDir(abspath, w, r)
+        cp.serveDir(cleanedPath, abspath, w, r)
     } else {
-        serveSingleImage(abspath, w, r)
+        cp.serveSingleImage(abspath, w, r)
     }
 }
 
@@ -192,7 +177,11 @@ func serveLocal(w http.ResponseWriter, r *http.Request) {
 func main() {
     fmt.Printf("Starting\n")
     http.Handle("/site/", http.FileServer(http.Dir(".")))
-    http.HandleFunc("/"+imageBaseUrl+"/", serveLocal)
+
+    for urlbase, dir := range localDirsMap {
+        cp := LocalFilesystemProvider{urlbase, dir}
+        http.HandleFunc(urlbase+"/", cp.serveLocal)
+    }
     http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
     fmt.Println(http.ListenAndServe("localhost:8080", nil))
 }
