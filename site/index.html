@@ -2,8 +2,12 @@
 <html>
 <head>
     <link rel="stylesheet" type="text/css" href="fastview.css">
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
-    <script src="http://github.com/cowboy/jquery-bbq/raw/v1.2.1/jquery.ba-bbq.min.js"></script>
+<!--     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+ -->
+<!--     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script> -->
+    <script src="/site/scripts/jquery.min.js"></script>
+    <script src="/site/scripts/jquery.ba-bbq.min.js"></script>
+    <script src="/site/scripts/jquery-photo-resize.js"></script>
     <script src="/site/scripts/fastview.js"></script>
 <script>
 //~ $(document).ready(function(){
@@ -15,20 +19,23 @@
 </head>
 
 <body>
-<a href="/image/">Local filesystem</a>
-<a id="testbtn" href="#">Click me</a>
-<p/>
+<a href="/">Home</a>
+<!-- <a id="testbtn" href="#">Click me</a>
+ -->
+ Thumbnail size: <input id="thumb-size" type="text" name="thumb-size" value="320"></input>
+ <p/>
 
-<h3 id="current-dir-name"></h3>
+<div id="thumbnails-page">
+    <h3 id="current-dir-name"></h3>
 
-<div id="directories">
-<p>dir1</p>
-<p>dir2</p>
+    <div id="directories">
+    </div>
+
+    <div id="thumbnails">
+    </div>
 </div>
 
-<div id="thumbnails">
-<p>thumb1</p>
-<p>thumb2</p>
+<div id="fullscreen-page">
 </div>
 
 </body>
