@@ -25,20 +25,22 @@ $(document).ready(function() {
 
     $(window).bind( 'hashchange', function(e) {
         console.log("hashchange "+window.location.href);
+        var index=parseInt($.bbq.getState("index"));
+        if (!(index>0)) index=-1;
         var dir=$.bbq.getState("dir");
         if (dir) {
             selectPage("thumbnails");
-            loadDir(dir, $.bbq.getState("index"));
+            loadDir(dir, index);
             return;
         }
         var image=$.bbq.getState("image");
         if (image) {
             if ($("#thumbnails").children().length==0) {
                 // presumably opened a direct link to an image -- must load the thumbnails...
-                loadDir(image.substring(0,image.lastIndexOf("/")));
+                loadDir(image.substring(0,image.lastIndexOf("/")), -1);
             }
             selectPage("fullscreen");
-            showImage(image);
+            showImage(image, $.bbq.getState("size"), index);
             return;
         }
     });
@@ -46,9 +48,9 @@ $(document).ready(function() {
     if (window.location.href.indexOf("#")<0) {
         //~ window.location+="#dir=/pictures/";
         $.bbq.pushState({"dir": "/pictures"});
+    } else {
+        $(window).trigger( 'hashchange' );
     }
-
-    $(window).trigger( 'hashchange' );
 });
 
 // single page app support
@@ -94,7 +96,14 @@ function selectPage(page) {
     }
 }
 
-function loadDir(dir) {
+function getThumbnailByIndex(index) {
+    var imgEl=$("#thumbnails img:eq("+(index)+")");
+    if (imgEl.length==0) return null;
+    return imgEl;
+}
+
+function loadDir(dir, index) {
+            console.log("loadDir", dir, index);
     var thumbnails=$("#thumbnails");
     var dirs=$("#directories");
     thumbnails.empty();
@@ -111,20 +120,25 @@ function loadDir(dir) {
         if (imagelist) {
             imagelist.forEach(function(path, i) {
                 //~ console.log("image path:", path);
+                var filename=path.substring(path.lastIndexOf("/")+1);
                 var img=$('<img />', {
                     src: path+"?size="+(thumbnailStyleSize>thumbnailSize ? fullscreenSize : thumbnailSize),
-                    alt: path.substring(path.lastIndexOf("/")+1),
-                    class: "thumbnail"
+                    alt: filename,
                 });
-                img.css("padding", "10px");
                 img.css("max-height", thumbnailStyleSize+"px");
                 img.css("max-width", thumbnailStyleSize+"px");
                 img.click(function() {
                     window.location.href="#size="+fullscreenSize+"&index="+i+"&image="+encodeURIComponent(path);
                 });
-                //~ var span=$('<span/>');
-                //~ span.append(img);
-                thumbnails.append(img);
+                var fnameLabel=$('<span/>', {
+                    class: "filename-label"
+                });
+                fnameLabel.text(filename);
+                var span=$('<span/>', {class: "thumbnail"});
+                span.append(fnameLabel);
+                span.append(img);
+
+                thumbnails.append(span);
             });
         }
 
@@ -151,8 +165,7 @@ function loadDir(dir) {
         }
     });
 
-    if (parseInt($.bbq.getState("index"))>0) {
-        var index=parseInt($.bbq.getState("index"), 10);
+    if (index>0) {
         var imgEl=$("#thumbnails img:eq("+(index)+")");
 
         var scroll=function() {
@@ -171,22 +184,48 @@ function loadDir(dir) {
     }
 }
 
-function showImage(path) {
+var loadedForSure={}
+var finalImgDisplayed=false;
+
+function showImage(path, size, index) {
     var fullscreen=$("#fullscreen-page");
     fullscreen.empty();
     console.log("showImage("+path+")");
 
+    var thumb=getThumbnailByIndex(index);
+    var srcPath=path+"?size="+size;
+
+    if (thumb && !loadedForSure[srcPath] && thumb.attr("src")!==srcPath) {
+        // we have thumb, but maybe downloading the bigger pic takes time...
+        var img=$('<img />', {
+            src: thumb.attr("src"),
+            alt: path.substring(path.lastIndexOf("/")+1),
+        });
+        doit(img, false);
+    }
+
     var img=$('<img />', {
-        src: path+"?size="+$.bbq.getState("size"),
+        src: srcPath,
         alt: path.substring(path.lastIndexOf("/")+1),
     });
-    // this is ok for not-so-narrow browser sizes; otherwise should do something like in
-    // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
-    img.photoResize({bottomSpacing: 0});
-    img.on("load", function() { // prevent flickering
-        fullscreen.append(img);
-    });
-    img.click(function() {
-        window.location.href=path;
-    });
+    doit(img, true);
+
+    function doit(img, isFinal) {
+        // this is ok for not-so-narrow browser sizes; otherwise should do something like in
+        // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
+        img.photoResize({bottomSpacing: 0});
+        img.on("load", function() { // prevent flickering
+            if (isFinal || fullscreen.children().length===0) {
+                fullscreen.empty();
+                fullscreen.append(img);
+            }
+            if (isFinal) {
+                loadedForSure[srcPath]=true;
+                finalImgDisplayed=true;
+            }
+        });
+        img.click(function() {
+            window.location.href=path;
+        });
+    }
 }

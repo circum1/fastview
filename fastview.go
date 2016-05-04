@@ -1,5 +1,9 @@
 package main
 
+// TODO:
+// config file
+// preload cache (resize in backend, preload on frontend)
+
 import (
     "fmt"
     "net/http"
@@ -107,6 +111,10 @@ func (cp *LocalFilesystemProvider) Url2Path(url string) string {
     return path.Join(cp.baseDir, url)
 }
 
+func (cp *LocalFilesystemProvider) mkCacheFilename(abspath, sizeStr string) string {
+    return path.Join(config.cacheDir, sizeStr, cp.Path2Url(abspath))
+}
+
 func (cp *LocalFilesystemProvider) serveDir(urlPath string, fsPath string, w http.ResponseWriter, r *http.Request) {
 	files, err := ioutil.ReadDir(fsPath)
 	if err != nil {
@@ -140,24 +148,32 @@ func (cp *LocalFilesystemProvider) serveSingleImage(abspath string, w http.Respo
             break;
         }
     }
-    sizeStr=strconv.Itoa(size)
-    fmt.Printf("serving from cache, size: %v, %v\n", size, sizeStr)
-    cachepath := cp.mkCacheFilename(abspath, sizeStr)
-    if !mkThumbnail(cachepath, abspath, size, true) {
+    cachepath := mkThumbnail(cp, abspath, size, true)
+    if (len(cachepath)==0) {
         // fallback
         http.ServeFile(w, r, abspath)
         return
     }
     http.ServeFile(w, r, cachepath)
+    // create other size(s)
+    for _, val:=range allowedSizes {
+        if size!=val {
+            fmt.Printf("creating others in advance, size: %v, fname: %v\n", val, path.Base(abspath))
+            mkThumbnail(cp, abspath, val, false)
+        }
+    }
 }
 
-func mkThumbnail(cachepath, abspath string, size int, sync bool) bool {
+// Creates resized images (if it is not created already).
+// sync: if true, waits until the resized image is created, and returns its path.
+func mkThumbnail(cp ContentProvider, abspath string, size int, sync bool) string {
+    cachepath := cp.mkCacheFilename(abspath, strconv.Itoa(size))
     if inspectFile(cachepath)==REGULAR {
         cacheStat, _ := os.Stat(cachepath)
         origStat, _ := os.Stat(abspath)
         if  cacheStat.ModTime().After(origStat.ModTime()) {
             // we already have it
-            return true
+            return cachepath
         }
     }
     var callback chan bool
@@ -165,16 +181,19 @@ func mkThumbnail(cachepath, abspath string, size int, sync bool) bool {
         callback=make(chan bool)
     }
     task := RescaleTask{abspath, cachepath, size, callback}
-    go func () {urgentRescaleTasks <-task}()
     if sync {
+        go func () {urgentRescaleTasks <-task}()
         // this will synchronize
-        return <-callback
+        if (<-callback) {
+            return cachepath
+        }
+        // an error occurred
+        return ""
+    } else {
+        go func () {rescaleTasks <-task}()
     }
-    return true
-}
-
-func (cp *LocalFilesystemProvider) mkCacheFilename(abspath, sizeStr string) string {
-    return path.Join(config.cacheDir, sizeStr, cp.Path2Url(abspath))
+    // async
+    return ""
 }
 
 type RescaleTask struct {
@@ -186,6 +205,7 @@ type RescaleTask struct {
 }
 
 var urgentRescaleTasks chan RescaleTask = make(chan RescaleTask)
+var rescaleTasks chan RescaleTask = make(chan RescaleTask)
 
 func resizeImage(dest, src string, size int) bool {
 	var args = []string{
@@ -204,7 +224,21 @@ func resizeImage(dest, src string, size int) bool {
 }
 
 func thumbnailGenerator() {
-    for task := range urgentRescaleTasks {
+    for {
+        var task RescaleTask
+        select {
+        case task=<-urgentRescaleTasks: // has priority
+        default:
+            select {
+            case task=<-rescaleTasks:
+            default:
+                select { // both are empty right now; wait for any
+                    case task=<-urgentRescaleTasks:
+                    case task=<-rescaleTasks:
+                }
+            }
+        }
+        // Here or another, we have a task :)
         fmt.Printf("Rescale task: %v\n", task)
         dirname := path.Dir(task.CachePath)
         result := true
@@ -212,15 +246,7 @@ func thumbnailGenerator() {
             fmt.Fprintf(os.Stderr, "error creating cache directory: %v - error: %v\n", dirname, err)
             result=false
         } else {
-            //~ var size int
-            //~ switch task.ThumbSize {
-            //~ case THUMB_SMALL: size=320
-            //~ case THUMB_MED: size=800
-            //~ default: result=false;
-            //~ }
-            if result {
-                result = resizeImage(task.CachePath, task.ImagePath, task.Size)
-            }
+            result = resizeImage(task.CachePath, task.ImagePath, task.Size)
         }
         if task.Callback!=nil {
             task.Callback <- result
