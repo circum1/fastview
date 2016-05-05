@@ -15,6 +15,7 @@ import (
     "io/ioutil"
     "os/exec"
     "strconv"
+    "github.com/BurntSushi/toml"
     //~ "log"
 )
 
@@ -28,24 +29,21 @@ const (
     REGULAR = iota
 )
 
-type Config struct {
-    //~ localImageBaseDir string
-    cacheDir string
+type MappedDir struct {
+    Url string
+    Rootdir string
 }
 
-// local directories to serve
-var localDirsMap = map[string]string {
-    "/pictures": "/home/fery/Pictures",
+type Config struct {
+    //~ localImageBaseDir string
+    CacheDir string
+    LocalDirs []MappedDir
 }
+
 
 var allowedSizes=[...]int {640,1600}
 
-//~ var localDirsMapReverse = new map[string]string
-
-var config = Config {
-    //~ "/home/fery/Pictures",
-    "/home/fery/magan/fastview/fastview/data/cache",
-}
+var config Config
 
 type Image struct {
     // full URL path (including the source identifier, e.g. localImageBaseDir)
@@ -112,7 +110,7 @@ func (cp *LocalFilesystemProvider) Url2Path(url string) string {
 }
 
 func (cp *LocalFilesystemProvider) mkCacheFilename(abspath, sizeStr string) string {
-    return path.Join(config.cacheDir, sizeStr, cp.Path2Url(abspath))
+    return path.Join(config.CacheDir, sizeStr, cp.Path2Url(abspath))
 }
 
 func (cp *LocalFilesystemProvider) serveDir(urlPath string, fsPath string, w http.ResponseWriter, r *http.Request) {
@@ -281,13 +279,38 @@ func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *http.Req
 }
 
 func main() {
-    fmt.Printf("Starting\n")
+    if confData, err := ioutil.ReadFile(path.Join(os.Getenv("HOME"),".fastviewrc")); err==nil {
+        confString:=string(confData)
+        _, err := toml.Decode(confString, &config)
+        if err!=nil {
+            fmt.Printf(".fastviewrc parse error: %v\n", err)
+            os.Exit(1)
+        }
+    } else {
+        fmt.Println("Missing config file ~/.fastviewrc -- running with hardcoded defaults")
+        localDirsMap := MappedDir{"/pictures", "/home/fery/Pictures"}
+        config = Config {
+            "/home/fery/magan/fastview/fastview/data/cache",
+            []MappedDir{localDirsMap},
+        }
+    }
+    if len(config.CacheDir)==0 || inspectFile(config.CacheDir)!=DIRECTORY {
+        fmt.Printf("Invalid cache dir '%v' -- check config file or create cache directory\n", config.CacheDir)
+        return
+    }
+    fmt.Printf("Using cache dir %v\n", config.CacheDir)
+    if len(config.LocalDirs)==0 {
+        fmt.Printf("No local directory is served -- check config file\n")
+        return
+    }
+
     go thumbnailGenerator()
     http.Handle("/site/", http.FileServer(http.Dir(".")))
 
-    for urlbase, dir := range localDirsMap {
-        cp := LocalFilesystemProvider{urlbase, dir}
-        http.HandleFunc(urlbase+"/", cp.serveLocal)
+    for _, val := range config.LocalDirs {
+        fmt.Printf("Serving directory %v under %v\n", val.Rootdir, val.Url)
+        cp := LocalFilesystemProvider{val.Url, val.Rootdir}
+        http.HandleFunc(val.Url+"/", cp.serveLocal)
     }
     http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
     fmt.Println(http.ListenAndServe("localhost:8080", nil))

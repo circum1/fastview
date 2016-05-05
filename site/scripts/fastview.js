@@ -118,6 +118,7 @@ function loadDir(dir, index) {
         var list=JSON.parse(data);
         var imagelist=list.images;
         if (imagelist) {
+            thumbnails.empty();
             imagelist.forEach(function(path, i) {
                 //~ console.log("image path:", path);
                 var filename=path.substring(path.lastIndexOf("/")+1);
@@ -152,6 +153,7 @@ function loadDir(dir, index) {
             dirs.append($('<br/>'));
         }
 
+        dirs.empty();
         var dirlist=list.dirs;
         if (dir.lastIndexOf("/")>0) {
             var parent=dir.substring(0,dir.lastIndexOf("/"));
@@ -184,7 +186,10 @@ function loadDir(dir, index) {
     }
 }
 
-var loadedForSure={}
+// if at least one fullscreen image was served, then we don't hassle with the smaller ones
+// (else some annoying flickering can be seen if both images showed in quick succession)
+var dirsWithFullscreenImages={}
+
 var finalImgDisplayed=false;
 
 function showImage(path, size, index) {
@@ -192,10 +197,11 @@ function showImage(path, size, index) {
     fullscreen.empty();
     console.log("showImage("+path+")");
 
+    var basedir=path.substring(0, path.lastIndexOf("/"));
     var thumb=getThumbnailByIndex(index);
     var srcPath=path+"?size="+size;
 
-    if (thumb && !loadedForSure[srcPath] && thumb.attr("src")!==srcPath) {
+    if (thumb && !dirsWithFullscreenImages[basedir] && thumb.attr("src")!==srcPath) {
         // we have thumb, but maybe downloading the bigger pic takes time...
         var img=$('<img />', {
             src: thumb.attr("src"),
@@ -215,12 +221,14 @@ function showImage(path, size, index) {
         // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
         img.photoResize({bottomSpacing: 0});
         img.on("load", function() { // prevent flickering
-            if (isFinal || fullscreen.children().length===0) {
+            // the bigger (final) img or the bigger one not yet displayed,
+            // AND it is the one what is currently in the url (could be navigated away)
+            if ((isFinal || fullscreen.children().length===0) && index===parseInt($.bbq.getState("index"))) {
                 fullscreen.empty();
                 fullscreen.append(img);
             }
             if (isFinal) {
-                loadedForSure[srcPath]=true;
+                dirsWithFullscreenImages[basedir]=true;
                 finalImgDisplayed=true;
             }
         });
