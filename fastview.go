@@ -15,7 +15,9 @@ import (
     "io/ioutil"
     "os/exec"
     "strconv"
+    "crypto/md5"
     "github.com/BurntSushi/toml"
+    "github.com/abbot/go-http-auth"
     //~ "log"
 )
 
@@ -32,11 +34,14 @@ const (
 type MappedDir struct {
     Url string
     Rootdir string
+    Username string
+    Password string
 }
 
 type Config struct {
     //~ localImageBaseDir string
     CacheDir string
+    Port int
     LocalDirs []MappedDir
 }
 
@@ -56,9 +61,6 @@ func (i Image) x(){
 
 }
 
-// Map of URL Path -> Image
-var imagesMap map[string]Image = make(map[string]Image)
-
 func sendErr(w http.ResponseWriter, error string) {
     fmt.Fprint(w, error);
 }
@@ -75,6 +77,9 @@ func inspectFile(name string) int {
     }
 }
 
+// Map of URL Path -> Image
+//~ var imagesMap map[string]Image = make(map[string]Image)
+
 // ContentProvider & implementers
 
 type ContentProvider interface{
@@ -86,27 +91,28 @@ type ContentProvider interface{
 }
 
 type LocalFilesystemProvider struct {
-    // base of url path
-    baseUrl string
-    // base directory
-    baseDir string
+    MappedDir
+    //~ // base of url path
+    //~ baseUrl string
+    //~ // base directory
+    //~ baseDir string
 }
 
 func (cp *LocalFilesystemProvider) Path2Url(cpPath string) string {
     if path.IsAbs(cpPath) {
-        if strings.HasPrefix(cpPath, cp.baseDir) {
-            cpPath=cpPath[len(cp.baseDir):]
+        if strings.HasPrefix(cpPath, cp.Rootdir) {
+            cpPath=cpPath[len(cp.Rootdir):]
         }
     }
-    return path.Join(cp.baseUrl, cpPath)
+    return path.Join(cp.Url, cpPath)
 }
 
 func (cp *LocalFilesystemProvider) Url2Path(url string) string {
-    if !strings.HasPrefix(url, cp.baseUrl) {
+    if !strings.HasPrefix(url, cp.Url) {
         return ""
     }
-    url=url[len(cp.baseUrl):]
-    return path.Join(cp.baseDir, url)
+    url=url[len(cp.Url):]
+    return path.Join(cp.Rootdir, url)
 }
 
 func (cp *LocalFilesystemProvider) mkCacheFilename(abspath, sizeStr string) string {
@@ -212,13 +218,16 @@ func resizeImage(dest, src string, size int) bool {
 		src,
 	}
 	var cmd *exec.Cmd
-	path, _ := exec.LookPath("vipsthumbnail")
-	cmd = exec.Command(path, args...)
-	err := cmd.Run()
-	if err != nil {
-		fmt.Printf("Error while running '%v': %v", args, err)
-	}
-	return err==nil
+    var err error
+	if path, err := exec.LookPath("vipsthumbnail"); err==nil {
+        cmd = exec.Command(path, args...)
+        err = cmd.Run()
+        if err == nil {
+            return true
+        }
+    }
+    fmt.Printf("Error while resizing: %v", err)
+    return false
 }
 
 func thumbnailGenerator() {
@@ -238,6 +247,20 @@ func thumbnailGenerator() {
         }
         // Here or another, we have a task :)
         fmt.Printf("Rescale task: %v\n", task)
+
+        // recheck if exists -- a file can be put more than once in the chan...
+        if inspectFile(task.CachePath)==REGULAR {
+            cacheStat, _ := os.Stat(task.CachePath)
+            origStat, _ := os.Stat(task.ImagePath)
+            if  cacheStat.ModTime().After(origStat.ModTime()) {
+                if task.Callback!=nil {
+                    task.Callback <- true
+                    close(task.Callback)
+                }
+                return
+            }
+        }
+
         dirname := path.Dir(task.CachePath)
         result := true
         if err := os.MkdirAll(dirname, 0755); err != nil {
@@ -262,7 +285,6 @@ func thumbnailGenerator() {
 // If the request points to an image, the image itself is put to the response.
 func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *http.Request) {
     //~ fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
-
     cleanedPath := path.Clean(r.URL.Path)
     abspath := cp.Url2Path(cleanedPath)
     fmt.Printf("serveLocal() cleanedPath: %v, fs path: %v\n", cleanedPath, abspath)
@@ -278,6 +300,17 @@ func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *http.Req
     }
 }
 
+func (cp *LocalFilesystemProvider) Secret(user, realm string) string {
+    //~ fmt.Printf("Secret(%v, %v)\nusername: %v, realm: %v, pass: |%v\n",user, realm, cp.Username, cp.Url, cp.Password)
+    // HA1: MD5(username:realm:password)
+    if cp.Username!=user || cp.Url!=realm {
+        return ""
+    }
+    h := md5.New()
+    fmt.Fprintf(h, "%v:%v:%v", cp.Username, cp.Url, cp.Password)
+    return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 func main() {
     if confData, err := ioutil.ReadFile(path.Join(os.Getenv("HOME"),".fastviewrc")); err==nil {
         confString:=string(confData)
@@ -288,9 +321,10 @@ func main() {
         }
     } else {
         fmt.Println("Missing config file ~/.fastviewrc -- running with hardcoded defaults")
-        localDirsMap := MappedDir{"/pictures", "/home/fery/Pictures"}
+        localDirsMap := MappedDir{"/pictures", "/home/fery/Pictures", "", ""}
         config = Config {
             "/home/fery/magan/fastview/fastview/data/cache",
+            8080,
             []MappedDir{localDirsMap},
         }
     }
@@ -306,12 +340,24 @@ func main() {
 
     go thumbnailGenerator()
     http.Handle("/site/", http.FileServer(http.Dir(".")))
+    //~ http.HandleFunc("/site/", func (w http.ResponseWriter, r *http.Request) {
+            //~ w.WriteHeader(http.StatusUnauthorized)
+        //~ fmt.Fprintf(w, "Authorization required")
+        //~ })
+
+
 
     for _, val := range config.LocalDirs {
         fmt.Printf("Serving directory %v under %v\n", val.Rootdir, val.Url)
-        cp := LocalFilesystemProvider{val.Url, val.Rootdir}
-        http.HandleFunc(val.Url+"/", cp.serveLocal)
+        cp := LocalFilesystemProvider{val}
+        auth := auth.NewDigestAuthenticator(cp.Url, cp.Secret)
+        http.HandleFunc(val.Url+"/", auth.JustCheck(cp.serveLocal))
     }
     http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
-    fmt.Println(http.ListenAndServe("localhost:8080", nil))
+    hostString := ":8080"
+    if config.Port!=0 {
+        hostString=":"+strconv.Itoa(config.Port)
+    }
+    fmt.Printf("Listening on %v\n", hostString)
+    fmt.Println(http.ListenAndServe(hostString, nil))
 }
