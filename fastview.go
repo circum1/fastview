@@ -15,7 +15,7 @@ import (
     "io/ioutil"
     "os/exec"
     "strconv"
-    "crypto/md5"
+    //~ "crypto/md5"
     "github.com/BurntSushi/toml"
     "github.com/abbot/go-http-auth"
     //~ "log"
@@ -283,7 +283,7 @@ func thumbnailGenerator() {
 // put to the response in JSON
 //
 // If the request points to an image, the image itself is put to the response.
-func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *http.Request) {
+func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
     //~ fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
     cleanedPath := path.Clean(r.URL.Path)
     abspath := cp.Url2Path(cleanedPath)
@@ -295,20 +295,29 @@ func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *http.Req
 
     switch inspectFile(abspath) {
     case NOTHING: fmt.Fprintf(w, "Bad path")
-    case DIRECTORY: cp.serveDir(cleanedPath, abspath, w, r)
-    case REGULAR: cp.serveSingleImage(abspath, w, r)
+    case DIRECTORY: cp.serveDir(cleanedPath, abspath, w, &r.Request)
+    case REGULAR: cp.serveSingleImage(abspath, w, &r.Request)
     }
 }
 
-func (cp *LocalFilesystemProvider) Secret(user, realm string) string {
+//~ func (cp *LocalFilesystemProvider) MD5Secret(user, realm string) string {
+    //~ //fmt.Printf("Secret(%v, %v)\nusername: %v, realm: %v, pass: |%v\n",user, realm, cp.Username, cp.Url, cp.Password)
+    //~ // HA1: MD5(username:realm:password)
+    //~ if cp.Username!=user || cp.Url!=realm {
+        //~ return ""
+    //~ }
+    //~ h := md5.New()
+    //~ fmt.Fprintf(h, "%v:%v:%v", cp.Username, cp.Url, cp.Password)
+    //~ return fmt.Sprintf("%x", h.Sum(nil))
+//~ }
+
+func (cp *LocalFilesystemProvider) BasicSecret(user, realm string) string {
     //~ fmt.Printf("Secret(%v, %v)\nusername: %v, realm: %v, pass: |%v\n",user, realm, cp.Username, cp.Url, cp.Password)
     // HA1: MD5(username:realm:password)
     if cp.Username!=user || cp.Url!=realm {
         return ""
     }
-    h := md5.New()
-    fmt.Fprintf(h, "%v:%v:%v", cp.Username, cp.Url, cp.Password)
-    return fmt.Sprintf("%x", h.Sum(nil))
+    return cp.Password
 }
 
 func main() {
@@ -350,8 +359,9 @@ func main() {
     for _, val := range config.LocalDirs {
         fmt.Printf("Serving directory %v under %v\n", val.Rootdir, val.Url)
         cp := LocalFilesystemProvider{val}
-        auth := auth.NewDigestAuthenticator(cp.Url, cp.Secret)
-        http.HandleFunc(val.Url+"/", auth.JustCheck(cp.serveLocal))
+        //~ auth := auth.NewDigestAuthenticator(cp.Url, cp.Secret)
+        auth := auth.NewBasicAuthenticator(cp.Url, cp.BasicSecret)
+        http.HandleFunc(val.Url+"/", auth.Wrap(cp.serveLocal))
     }
     http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
     hostString := ":8080"
