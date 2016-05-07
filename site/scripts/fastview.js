@@ -26,7 +26,7 @@ $(document).ready(function() {
     $(window).bind( 'hashchange', function(e) {
         console.log("hashchange "+window.location.href);
         var index=parseInt($.bbq.getState("index"));
-        if (!(index>0)) index=-1;
+        if (!(index>=0)) index=-1;
         var dir=$.bbq.getState("dir");
         if (dir) {
             selectPage("thumbnails");
@@ -195,7 +195,7 @@ var finalImgDisplayed=false;
 function showImage(path, size, index) {
     var fullscreen=$("#fullscreen-page");
     fullscreen.empty();
-    console.log("showImage("+path+")");
+    console.log("showImage("+path+", "+size+", "+index+")");
 
     var basedir=path.substring(0, path.lastIndexOf("/"));
     var thumb=getThumbnailByIndex(index);
@@ -221,9 +221,11 @@ function showImage(path, size, index) {
         // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
         img.photoResize({bottomSpacing: 0});
         img.on("load", function() { // prevent flickering
+            console.log("doit.onLoad, index: ", index, ", bbq.index: ", $.bbq.getState("index"));
             // the bigger (final) img or the bigger one not yet displayed,
             // AND it is the one what is currently in the url (could be navigated away)
             if ((isFinal || fullscreen.children().length===0) && index===parseInt($.bbq.getState("index"))) {
+                console.log("doit.onLoad: displaying");
                 fullscreen.empty();
                 fullscreen.append(img);
             }
