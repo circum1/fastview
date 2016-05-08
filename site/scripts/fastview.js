@@ -26,7 +26,7 @@ $(document).ready(function() {
     $(window).bind( 'hashchange', function(e) {
         console.log("hashchange "+window.location.href);
         var index=parseInt($.bbq.getState("index"));
-        if (!(index>=0)) index=-1;
+        if (!(index>=0)) index=-1; // aware of NaN
         var dir=$.bbq.getState("dir");
         if (dir) {
             selectPage("thumbnails");
@@ -192,6 +192,26 @@ var dirsWithFullscreenImages={}
 
 var finalImgDisplayed=false;
 
+var imagesPrefetchCache=[]
+
+imagesPrefetchCache.addItem=function(item) {
+    if (!item || !item.url) return;
+    for (var i=0; i<this.length; i++) {
+        if (this[i].url===item.url) return;
+    }
+    if (this.length>=5) {
+        this.shift();
+    }
+    this.push(item);
+}
+
+imagesPrefetchCache.getImg=function(url) {
+    for (var i=0; i<this.length; i++) {
+        if (this[i].url===url) return this[i].img;
+    }
+    return undefined;
+}
+
 function showImage(path, size, index) {
     var fullscreen=$("#fullscreen-page");
     fullscreen.empty();
@@ -200,6 +220,29 @@ function showImage(path, size, index) {
     var basedir=path.substring(0, path.lastIndexOf("/"));
     var thumb=getThumbnailByIndex(index);
     var srcPath=path+"?size="+size;
+
+    function prefetchByIndex(ind) {
+        if (ind<0) return undefined;
+        var imgEl=$("#thumbnails img:eq("+(ind)+")");
+        if (imgEl.length==1) {
+            var imgPath=imgEl.attr("src");
+            imgPath=imgPath.substring(0, imgPath.indexOf("?"));
+            var srcUrl=imgPath+"?size="+size;
+            var img=$('<img />', {
+                src: srcUrl,
+                alt: imgPath.substring(imgPath.lastIndexOf("/")+1),
+            });
+            img.photoResize({bottomSpacing: 0});
+            img.click(function() {
+                window.location.href=path;
+            });
+            return {url: srcUrl, img: img};
+        }
+        return undefined;
+    }
+
+    imagesPrefetchCache.addItem(prefetchByIndex(index+1));
+    imagesPrefetchCache.addItem(prefetchByIndex(index+2));
 
     if (thumb && !dirsWithFullscreenImages[basedir] && thumb.attr("src")!==srcPath) {
         // we have thumb, but maybe downloading the bigger pic takes time...
@@ -210,22 +253,28 @@ function showImage(path, size, index) {
         doit(img, false);
     }
 
-    var img=$('<img />', {
-        src: srcPath,
-        alt: path.substring(path.lastIndexOf("/")+1),
-    });
-    doit(img, true);
+
+    var img=imagesPrefetchCache.getImg(srcPath)
+    if (!img) {
+        img=$('<img />', {
+            src: srcPath,
+            alt: path.substring(path.lastIndexOf("/")+1),
+        });
+        doit(img, true);
+    } else {
+        console.log("serving from prefetch: ",img.attr("src"));
+        fullscreen.append(img);
+    }
 
     function doit(img, isFinal) {
         // this is ok for not-so-narrow browser sizes; otherwise should do something like in
         // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
         img.photoResize({bottomSpacing: 0});
         img.on("load", function() { // prevent flickering
-            console.log("doit.onLoad, index: ", index, ", bbq.index: ", $.bbq.getState("index"));
+            console.log("load called: ",isFinal, img.attr("src"));
             // the bigger (final) img or the bigger one not yet displayed,
             // AND it is the one what is currently in the url (could be navigated away)
             if ((isFinal || fullscreen.children().length===0) && index===parseInt($.bbq.getState("index"))) {
-                console.log("doit.onLoad: displaying");
                 fullscreen.empty();
                 fullscreen.append(img);
             }
