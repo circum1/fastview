@@ -162,7 +162,7 @@ func (cp *LocalFilesystemProvider) serveSingleImage(abspath string, w http.Respo
     // create other size(s)
     for _, val:=range allowedSizes {
         if size!=val {
-            fmt.Printf("creating others in advance, size: %v, fname: %v\n", val, path.Base(abspath))
+            fmt.Printf("creating other size in advance, size: %v, fname: %v\n", val, path.Base(abspath))
             mkThumbnail(cp, abspath, val, false)
         }
     }
@@ -246,7 +246,7 @@ func thumbnailGenerator() {
             }
         }
         // Here or another, we have a task :)
-        fmt.Printf("Rescale task: %v\n", task)
+        fmt.Printf("thumbnailGenerator() rescale task: %v\n", task)
 
         // recheck if exists -- a file can be put more than once in the chan...
         if inspectFile(task.CachePath)==REGULAR {
@@ -257,7 +257,7 @@ func thumbnailGenerator() {
                     task.Callback <- true
                     close(task.Callback)
                 }
-                return
+                continue
             }
         }
 
@@ -287,7 +287,7 @@ func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *auth.Aut
     //~ fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
     cleanedPath := path.Clean(r.URL.Path)
     abspath := cp.Url2Path(cleanedPath)
-    fmt.Printf("serveLocal() cleanedPath: %v, fs path: %v\n", cleanedPath, abspath)
+    fmt.Printf("serveLocal() query: %v\n", r.URL)
     if len(abspath)==0 {
         fmt.Fprintf(w, "invalid URL")
         return

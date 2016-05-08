@@ -241,11 +241,17 @@ function showImage(path, size, index) {
         return undefined;
     }
 
-    imagesPrefetchCache.addItem(prefetchByIndex(index+1));
-    imagesPrefetchCache.addItem(prefetchByIndex(index+2));
+    // don't prefetch until we don't know if it is fast from server side
+    if (dirsWithFullscreenImages[basedir]==true) {
+        imagesPrefetchCache.addItem(prefetchByIndex(index+1));
+        imagesPrefetchCache.addItem(prefetchByIndex(index+2));
+    }
 
-    if (thumb && !dirsWithFullscreenImages[basedir] && thumb.attr("src")!==srcPath) {
-        // we have thumb, but maybe downloading the bigger pic takes time...
+    var img=imagesPrefetchCache.getImg(srcPath)
+    var prefetchedOk=img && img.get(0).complete; // img.attr() is not in sync with the DOM current state
+
+    // we have thumb, but don't know if bigger pics are ready or we already prefetched the image, but it is not downloaded yet
+    if (thumb && thumb.attr("src")!==srcPath && (!dirsWithFullscreenImages[basedir] || !prefetchedOk)) {
         var img=$('<img />', {
             src: thumb.attr("src"),
             alt: path.substring(path.lastIndexOf("/")+1),
@@ -253,16 +259,13 @@ function showImage(path, size, index) {
         doit(img, false);
     }
 
-
-    var img=imagesPrefetchCache.getImg(srcPath)
-    if (!img) {
+    if (!prefetchedOk) {
         img=$('<img />', {
             src: srcPath,
             alt: path.substring(path.lastIndexOf("/")+1),
         });
         doit(img, true);
     } else {
-        console.log("serving from prefetch: ",img.attr("src"));
         fullscreen.append(img);
     }
 
