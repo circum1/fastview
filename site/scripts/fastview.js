@@ -6,11 +6,23 @@ var fullscreenSize=1600;
 var thumbnailStyleSize=320;
 
 $(document).ready(function() {
-    console.log("document.ready()");
-    $("#testbtn").click(function() {
-       var thumbnails=$("#thumbnails");
-        thumbnails.empty();
+    $("#downloadBtn").click(function() {
+        var image=$.bbq.getState("image");
+        if (image) {
+            window.location.href=image;
+        }
     });
+
+    var decoratorTimeoutId;
+    $(document).mousemove(function() {
+        clearTimeout(decoratorTimeoutId);
+        var decoration=$("#fullscreen-decoration");
+        decoration.fadeIn();
+        decoratorTimeoutId=setTimeout(function() {
+            decoration.fadeOut();
+        }, 3000);
+    });
+
 
     $("#thumb-size").on("keydown", function(e) {
         if (e.keyCode == 13) {
@@ -71,7 +83,7 @@ function selectPage(page) {
     }
 
     function handleFullscreenKeys(e) {
-        if (e.keyCode == 27) { // escape key maps to keycode `27`
+        if (e.which == 27) { // escape key maps to keycode `27`
             var image=$.bbq.getState("image");
             var dir=image.substring(0,image.lastIndexOf("/"));
             window.location.href="#index="+encodeURIComponent($.bbq.getState("index"))+"&dir="+encodeURIComponent(dir);
@@ -103,7 +115,7 @@ function getThumbnailByIndex(index) {
 }
 
 function loadDir(dir, index) {
-            console.log("loadDir", dir, index);
+    console.log("loadDir", dir, index);
     var thumbnails=$("#thumbnails");
     var dirs=$("#directories");
     thumbnails.empty();
@@ -135,11 +147,11 @@ function loadDir(dir, index) {
                     class: "filename-label"
                 });
                 fnameLabel.text(filename);
-                var span=$('<span/>', {class: "thumbnail"});
-                span.append(fnameLabel);
-                span.append(img);
+                var container=$('<div/>', {class: "thumbnail"});
+                container.append(fnameLabel);
+                container.append(img);
 
-                thumbnails.append(span);
+                thumbnails.append(container);
             });
         }
 
@@ -190,8 +202,6 @@ function loadDir(dir, index) {
 // (else some annoying flickering can be seen if both images showed in quick succession)
 var dirsWithFullscreenImages={}
 
-var finalImgDisplayed=false;
-
 var imagesPrefetchCache=[]
 
 imagesPrefetchCache.addItem=function(item) {
@@ -213,7 +223,7 @@ imagesPrefetchCache.getImg=function(url) {
 }
 
 function showImage(path, size, index) {
-    var fullscreen=$("#fullscreen-page");
+    var fullscreen=$("#fullscreen-img");
     fullscreen.empty();
     console.log("showImage("+path+", "+size+", "+index+")");
 
@@ -225,16 +235,11 @@ function showImage(path, size, index) {
         if (ind<0) return undefined;
         var imgEl=$("#thumbnails img:eq("+(ind)+")");
         if (imgEl.length==1) {
-            var imgPath=imgEl.attr("src");
-            imgPath=imgPath.substring(0, imgPath.indexOf("?"));
+            var imgPath=imgEl.attr("src").substring(0, imgEl.attr("src").indexOf("?"));
             var srcUrl=imgPath+"?size="+size;
             var img=$('<img />', {
                 src: srcUrl,
                 alt: imgPath.substring(imgPath.lastIndexOf("/")+1),
-            });
-            img.photoResize({bottomSpacing: 0});
-            img.click(function() {
-                window.location.href=path;
             });
             return {url: srcUrl, img: img};
         }
@@ -243,31 +248,32 @@ function showImage(path, size, index) {
 
     // don't prefetch until we don't know if it is fast from server side
     if (dirsWithFullscreenImages[basedir]==true) {
+        imagesPrefetchCache.addItem(prefetchByIndex(index-1));
         imagesPrefetchCache.addItem(prefetchByIndex(index+1));
         imagesPrefetchCache.addItem(prefetchByIndex(index+2));
     }
 
-    var img=imagesPrefetchCache.getImg(srcPath)
-    var prefetchedOk=img && img.get(0).complete; // img.attr() is not in sync with the DOM current state
+    var img=imagesPrefetchCache.getImg(srcPath);
+    if (img && !img.get(0).complete) { // img.attr() is not in sync with the DOM current state
+        img=undefined;
+    }
 
     // we have thumb, but don't know if bigger pics are ready or we already prefetched the image, but it is not downloaded yet
-    if (thumb && thumb.attr("src")!==srcPath && (!dirsWithFullscreenImages[basedir] || !prefetchedOk)) {
-        var img=$('<img />', {
+    if (thumb && thumb.attr("src")!==srcPath && !img) {
+        var tmpimg=$('<img />', {
             src: thumb.attr("src"),
             alt: path.substring(path.lastIndexOf("/")+1),
         });
-        doit(img, false);
+        doit(tmpimg, false);
     }
 
-    if (!prefetchedOk) {
+    if (!img) {
         img=$('<img />', {
             src: srcPath,
             alt: path.substring(path.lastIndexOf("/")+1),
         });
-        doit(img, true);
-    } else {
-        fullscreen.append(img);
     }
+    doit(img, true);
 
     function doit(img, isFinal) {
         // this is ok for not-so-narrow browser sizes; otherwise should do something like in
@@ -283,11 +289,16 @@ function showImage(path, size, index) {
             }
             if (isFinal) {
                 dirsWithFullscreenImages[basedir]=true;
-                finalImgDisplayed=true;
             }
+            img.click(function() {
+                console.log("img click");
+                var e = jQuery.Event("keyup");
+                e.which = 27;
+                $(document).trigger(e);
+            });
         });
-        img.click(function() {
-            window.location.href=path;
-        });
+        if (img.get(0).complete) { // for prefetched images
+            img.trigger("load");
+        }
     }
 }

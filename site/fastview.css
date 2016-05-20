@@ -25,7 +25,19 @@
     background: #202020;
  }
 
-#fullscreen-page img *{
+#fullscreen-img {
+	position:relative;
+	display: inline-block;
+}
+
+#fullscreen-decoration {
+	position:absolute;
+	display: inline-block;
+	display: none;
+	top:0px; right:0px;
+}
+
+/*#fullscreen-page img *{*/
 /*    vertical-align: middle;*/
 /*     height: 1000;
    max-width: 100%;
@@ -33,5 +45,6 @@
 /* 	width: parent;
     max-width: 100%;
  *//*    width: auto;*/
-
+/*
  }
+*/
