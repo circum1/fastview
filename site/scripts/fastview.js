@@ -13,6 +13,15 @@ $(document).ready(function() {
         }
     });
 
+    // translate swipe events to keyboard events
+    var hammertime = new Hammer($("#fullscreen-img").get(0));
+    hammertime.on('swipe', function(ev) {
+        var keycode=ev.direction==Hammer.DIRECTION_RIGHT ? 37 : 39;
+        var e = jQuery.Event("keyup");
+        e.which = keycode;
+        $(document).trigger(e);
+    });
+
     var decoratorTimeoutId;
     $(document).mousemove(function() {
         clearTimeout(decoratorTimeoutId);
@@ -20,12 +29,12 @@ $(document).ready(function() {
         decoration.fadeIn();
         decoratorTimeoutId=setTimeout(function() {
             decoration.fadeOut();
-        }, 3000);
+        }, 2000);
     });
 
 
     $("#thumb-size").on("keydown", function(e) {
-        if (e.keyCode == 13) {
+        if (e.which == 13) {
             var newVal=parseInt($(this).val());
             if (newVal>=96 && newVal<=fullscreenSize) {
                 thumbnailStyleSize=newVal;
@@ -88,8 +97,8 @@ function selectPage(page) {
             var dir=image.substring(0,image.lastIndexOf("/"));
             window.location.href="#index="+encodeURIComponent($.bbq.getState("index"))+"&dir="+encodeURIComponent(dir);
             return false;
-        } else if (e.keyCode == 37 || e.keyCode == 39) { // 37: left, 39: right
-            nextImage(e.keyCode-38);
+        } else if (e.which == 37 || e.which == 39) { // 37: left, 39: right
+            nextImage(e.which-38);
             return false;
         }
         return true;
@@ -103,6 +112,7 @@ function selectPage(page) {
     $(document).off("keyup.fastview");
     $(document).off("wheel.fastview");
     if (page==="fullscreen") {
+        $("#fullscreen-decoration").hide();
         $(document).on("keyup.fastview", handleFullscreenKeys);
         $(document).on("wheel.fastview", handleFullscreenWheel);
     }
@@ -275,27 +285,30 @@ function showImage(path, size, index) {
     }
     doit(img, true);
 
+    function pressEsc() {
+        var e = jQuery.Event("keyup");
+        e.which = 27;
+        $(document).trigger(e);
+    }
+
     function doit(img, isFinal) {
+            //~ console.log("doit called: ",isFinal, img.attr("src"));
         // this is ok for not-so-narrow browser sizes; otherwise should do something like in
         // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
         img.photoResize({bottomSpacing: 0});
+        img.on("error", pressEsc);
         img.on("load", function() { // prevent flickering
-            console.log("load called: ",isFinal, img.attr("src"));
+            //~ console.log("load called: ",isFinal, img.attr("src"));
             // the bigger (final) img or the bigger one not yet displayed,
             // AND it is the one what is currently in the url (could be navigated away)
-            if ((isFinal || fullscreen.children().length===0) && index===parseInt($.bbq.getState("index"))) {
+            if ((isFinal || fullscreen.children().length===0) && (index===parseInt($.bbq.getState("index")) || index==-1)) {
                 fullscreen.empty();
                 fullscreen.append(img);
             }
             if (isFinal) {
                 dirsWithFullscreenImages[basedir]=true;
             }
-            img.click(function() {
-                console.log("img click");
-                var e = jQuery.Event("keyup");
-                e.which = 27;
-                $(document).trigger(e);
-            });
+            img.click(pressEsc);
         });
         if (img.get(0).complete) { // for prefetched images
             img.trigger("load");

@@ -294,7 +294,7 @@ func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *auth.Aut
     }
 
     switch inspectFile(abspath) {
-    case NOTHING: fmt.Fprintf(w, "Bad path")
+    case NOTHING: http.Error(w, "Bad path", http.StatusNotFound)
     case DIRECTORY: cp.serveDir(cleanedPath, abspath, w, &r.Request)
     case REGULAR: cp.serveSingleImage(abspath, w, &r.Request)
     }
@@ -349,21 +349,27 @@ func main() {
 
     go thumbnailGenerator()
     http.Handle("/site/", http.FileServer(http.Dir(".")))
-    //~ http.HandleFunc("/site/", func (w http.ResponseWriter, r *http.Request) {
-            //~ w.WriteHeader(http.StatusUnauthorized)
-        //~ fmt.Fprintf(w, "Authorization required")
-        //~ })
-
-
 
     for _, val := range config.LocalDirs {
         fmt.Printf("Serving directory %v under %v\n", val.Rootdir, val.Url)
+        if strings.ToLower(val.Url)=="link" || strings.ToLower(val.Url)=="site" {
+            fmt.Printf(".fastviewrc error: the Url '%v' is reserved! Exiting.\n", val.Url)
+            os.Exit(1)
+        }
         cp := LocalFilesystemProvider{val}
         //~ auth := auth.NewDigestAuthenticator(cp.Url, cp.Secret)
         auth := auth.NewBasicAuthenticator(cp.Url, cp.BasicSecret)
         http.HandleFunc(val.Url+"/", auth.Wrap(cp.serveLocal))
     }
     http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
+    http.HandleFunc("/link/", func (w http.ResponseWriter, r *http.Request) {
+        what:="image"
+        if r.URL.Path[len(r.URL.Path)-1:]=="/" {
+            what="dir"
+        }
+        http.Redirect(w, r, fmt.Sprintf("/site/#size=%v&index=0&%v=%v",
+                allowedSizes[len(allowedSizes)-1], what, r.URL.Path[len("/link"):]), http.StatusMovedPermanently)
+    })
     hostString := ":8080"
     if config.Port!=0 {
         hostString=":"+strconv.Itoa(config.Port)
