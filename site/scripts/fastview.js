@@ -14,7 +14,7 @@ $(document).ready(function() {
     });
 
     // translate swipe events to keyboard events
-    var hammertime = new Hammer($("#fullscreen-img").get(0));
+    var hammertime = new Hammer($("#fullscreen-img").get(0), {domEvents: true, preventDefault: false});
     hammertime.on('swipe', function(ev) {
         var keycode=ev.direction==Hammer.DIRECTION_RIGHT ? 37 : 39;
         var e = jQuery.Event("keyup");
@@ -295,7 +295,7 @@ function showImage(path, size, index) {
             //~ console.log("doit called: ",isFinal, img.attr("src"));
         // this is ok for not-so-narrow browser sizes; otherwise should do something like in
         // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
-        img.photoResize({bottomSpacing: 0});
+        //img.photoResize({bottomSpacing: 0});
         img.on("error", pressEsc);
         img.on("load", function() { // prevent flickering
             //~ console.log("load called: ",isFinal, img.attr("src"));
