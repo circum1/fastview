@@ -2,8 +2,22 @@
 
 var thumbnailSize=640;
 var fullscreenSize=1600;
-
 var thumbnailStyleSize=320;
+
+// need of swipe transition when navigating between images in fullscreen mode.
+// can be -1, 0 or +1
+// nextImage() writes, showImage() reads and resets
+var swipeDirection=0;
+
+function mylog(args) {
+    console.log(args);
+    var l=document.getElementById("log");
+    if (l) {
+        l.textContent=l.textContent+args[0]+"\n";
+    }
+    //~ $("#log").append("<![CDATA[ "+s+" ]]>"+"\n");
+    //~ $("#log").append("<![CDATA["+s+"\n]]>");
+}
 
 $(document).ready(function() {
     $("#downloadBtn").click(function() {
@@ -13,8 +27,25 @@ $(document).ready(function() {
         }
     });
 
+    //~ document.addEventListener("touchstart", function(e) {
+        //~ console.log("touchstart event ", e);
+    //~ });
+    //~ document.addEventListener("touchmove", function(e) {
+        //~ console.log("touchmove event ", e);
+    //~ });
+
+    //~ document.addEventListener("touchend", function(e) {
+        //~ console.log("touchmove event ", e);
+    //~ });
+    //~ document.addEventListener("touchcancel", function(e) {
+        //~ console.log("touchmove event ", e);
+            //~ e.preventDefault();
+
+    //~ });
+
     // translate swipe events to keyboard events
-    var hammertime = new Hammer($("#fullscreen-img").get(0), {domEvents: true, preventDefault: false});
+    // touchAction: auto keeps browser's zoom and pan functionality
+    var hammertime = new Hammer($("#fullscreen-img").get(0), {touchAction: 'auto'});
     hammertime.on('swipe', function(ev) {
         var keycode=ev.direction==Hammer.DIRECTION_RIGHT ? 37 : 39;
         var e = jQuery.Event("keyup");
@@ -44,6 +75,9 @@ $(document).ready(function() {
         }
     });
 
+    // possible urls:
+    // #dir=/dir/name&index=n  (index is optional)
+    // #image=/path/to/image&index=n&size=1600
     $(window).bind( 'hashchange', function(e) {
         console.log("hashchange "+window.location.href);
         var index=parseInt($.bbq.getState("index"));
@@ -88,6 +122,7 @@ function selectPage(page) {
         if (newIndex<0) return undefined;
         var imgEl=$("#thumbnails img:eq("+newIndex+")");
         if (imgEl.length==0) return undefined;
+        swipeDirection = direction;
         imgEl.trigger("click");
     }
 
@@ -293,15 +328,23 @@ function showImage(path, size, index) {
 
     function doit(img, isFinal) {
             //~ console.log("doit called: ",isFinal, img.attr("src"));
-        // this is ok for not-so-narrow browser sizes; otherwise should do something like in
-        // http://stackoverflow.com/questions/20590239/maintain-aspect-ratio-of-div-but-fill-screen-width-and-height-in-css
-        //img.photoResize({bottomSpacing: 0});
         img.on("error", pressEsc);
         img.on("load", function() { // prevent flickering
             //~ console.log("load called: ",isFinal, img.attr("src"));
             // the bigger (final) img or the bigger one not yet displayed,
             // AND it is the one what is currently in the url (could be navigated away)
             if ((isFinal || fullscreen.children().length===0) && (index===parseInt($.bbq.getState("index")) || index==-1)) {
+                // we showed nothing until now, so let's slide if needed
+                if (fullscreen.children().length===0 && swipeDirection) {
+                    fullscreen.removeClass("slide-fromleft");
+                    fullscreen.removeClass("slide-fromright");
+                    var dirCopy=swipeDirection;
+                    swipeDirection=0;
+                    setTimeout(function() {
+                        var what = dirCopy>0 ? "slide-fromright" : "slide-fromleft"
+                        fullscreen.addClass(what);
+                    }, 0);
+                }
                 fullscreen.empty();
                 fullscreen.append(img);
             }
