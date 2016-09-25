@@ -17,11 +17,13 @@
 </head>
 
 <body>
-<a href="/">Home</a>
+<!-- <a href="/">Home</a> -->
 <!-- <a id="testbtn" href="#">Click me</a>
  <pre id="log"></pre>
  -->
- Thumbnail size: <input id="thumb-size" type="text" name="thumb-size" value="320"></input>
+ Set thumbnail size:
+ <input id="thumb-size" step="20" min="100" max="1600" type="range" name="thumb-size" value="320"></input>
+<span id="thumb-size-label"></span>
 
 <div id="thumbnails-page">
     <h3 id="current-dir-name"></h3>

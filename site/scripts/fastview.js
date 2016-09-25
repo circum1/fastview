@@ -11,12 +11,22 @@ var swipeDirection=0;
 
 function mylog(args) {
     console.log(args);
-    var l=document.getElementById("log");
-    if (l) {
-        l.textContent=l.textContent+args[0]+"\n";
-    }
+    //~ var l=document.getElementById("log");
+    //~ if (l) {
+        //~ l.textContent=l.textContent+args[0]+"\n";
+    //~ }
     //~ $("#log").append("<![CDATA[ "+s+" ]]>"+"\n");
     //~ $("#log").append("<![CDATA["+s+"\n]]>");
+}
+
+var decoratorTimeoutId;
+var decorationElement;
+function activateDecoration() {
+    clearTimeout(decoratorTimeoutId);
+    decorationElement.fadeIn();
+    decoratorTimeoutId=setTimeout(function() {
+        decorationElement.fadeOut();
+    }, 2000);
 }
 
 $(document).ready(function() {
@@ -27,59 +37,43 @@ $(document).ready(function() {
         }
     });
 
-    //~ document.addEventListener("touchstart", function(e) {
-        //~ console.log("touchstart event ", e);
-    //~ });
-    //~ document.addEventListener("touchmove", function(e) {
-        //~ console.log("touchmove event ", e);
-    //~ });
-
-    //~ document.addEventListener("touchend", function(e) {
-        //~ console.log("touchmove event ", e);
-    //~ });
-    //~ document.addEventListener("touchcancel", function(e) {
-        //~ console.log("touchmove event ", e);
-            //~ e.preventDefault();
-
-    //~ });
-
     // translate swipe events to keyboard events
     // touchAction: auto keeps browser's zoom and pan functionality
     var hammertime = new Hammer($("#fullscreen-img").get(0), {touchAction: 'auto'});
+    hammertime.get('swipe').set({ direction: Hammer.DIRECTION_ALL });
     hammertime.on('swipe', function(ev) {
-        var keycode=ev.direction==Hammer.DIRECTION_RIGHT ? 37 : 39;
-        var e = jQuery.Event("keyup");
-        e.which = keycode;
-        $(document).trigger(e);
-    });
-
-    var decoratorTimeoutId;
-    $(document).mousemove(function() {
-        clearTimeout(decoratorTimeoutId);
-        var decoration=$("#fullscreen-decoration");
-        decoration.fadeIn();
-        decoratorTimeoutId=setTimeout(function() {
-            decoration.fadeOut();
-        }, 2000);
-    });
-
-
-    $("#thumb-size").on("keydown", function(e) {
-        if (e.which == 13) {
-            var newVal=parseInt($(this).val());
-            if (newVal>=96 && newVal<=fullscreenSize) {
-                thumbnailStyleSize=newVal;
-                $.bbq.removeState("index");
-                $(window).trigger( 'hashchange' );
-            }
+        if (ev.direction==Hammer.DIRECTION_RIGHT || ev.direction==Hammer.DIRECTION_LEFT) {
+            var keycode=ev.direction==Hammer.DIRECTION_RIGHT ? 37 : 39;
+            var e = jQuery.Event("keyup");
+            e.which = keycode;
+            $(document).trigger(e);
+        }
+        if (ev.direction==Hammer.DIRECTION_DOWN) {
+            activateDecoration();
+            mylog("down!!");
         }
     });
+
+    decorationElement=$("#fullscreen-decoration");
+    $(document).on("mousemove", activateDecoration);
+
+    $("#thumb-size").on("change input", function(e) {
+        var newVal=parseInt($(this).val());
+        if (newVal>=96 && newVal<=fullscreenSize) {
+            thumbnailStyleSize=newVal;
+            var img=$("#thumbnails img");
+                img.css("max-height", thumbnailStyleSize+"px");
+                img.css("max-width", thumbnailStyleSize+"px");
+            $("#thumb-size-label").text(newVal);
+        }
+    });
+    $("#thumb-size").trigger("change");
 
     // possible urls:
     // #dir=/dir/name&index=n  (index is optional)
     // #image=/path/to/image&index=n&size=1600
     $(window).bind( 'hashchange', function(e) {
-        console.log("hashchange "+window.location.href);
+        mylog("hashchange "+window.location.href);
         var index=parseInt($.bbq.getState("index"));
         if (!(index>=0)) index=-1; // aware of NaN
         var dir=$.bbq.getState("dir");
@@ -100,7 +94,9 @@ $(document).ready(function() {
         }
     });
 
+        mylog("locaiton: "+window.location.href);
     if (window.location.href.indexOf("#")<0) {
+        mylog("adding default /pictures");
         //~ window.location+="#dir=/pictures/";
         $.bbq.pushState({"dir": "/pictures"});
     } else {
@@ -160,7 +156,7 @@ function getThumbnailByIndex(index) {
 }
 
 function loadDir(dir, index) {
-    console.log("loadDir", dir, index);
+    mylog("loadDir", dir, index);
     var thumbnails=$("#thumbnails");
     var dirs=$("#directories");
     thumbnails.empty();
@@ -170,14 +166,14 @@ function loadDir(dir, index) {
       url: dir,
     })
     .done(function( data ) {
-        //~ console.log( "Data loaded: ", data);
+        //~ mylog( "Data loaded: ", data);
         $("#current-dir-name").text(dir);
         var list=JSON.parse(data);
         var imagelist=list.images;
         if (imagelist) {
             thumbnails.empty();
             imagelist.forEach(function(path, i) {
-                //~ console.log("image path:", path);
+                //~ mylog("image path:", path);
                 var filename=path.substring(path.lastIndexOf("/")+1);
                 var img=$('<img />', {
                     src: path+"?size="+(thumbnailStyleSize>thumbnailSize ? fullscreenSize : thumbnailSize),
@@ -201,7 +197,7 @@ function loadDir(dir, index) {
         }
 
         function addDirLink(path, text) {
-            console.log("addDirLink ", path, text);
+            //~ mylog("addDirLink ", path, text);
             var link=$('<a />', {
                 href: "#dir="+encodeURIComponent(path),
             });
@@ -230,11 +226,11 @@ function loadDir(dir, index) {
         var scroll=function() {
             var imgEl=$("#thumbnails img:eq("+(index)+")");
             if (imgEl.offset()==undefined) {
-                console.log("wait for scroll...");
+                mylog("wait for scroll...");
                 window.requestAnimationFrame(scroll);
                 return;
             }
-            console.log("scroll!");
+            mylog("scroll!");
             $('html, body').animate({
                 scrollTop: imgEl.offset().top
             }, 500);
@@ -270,7 +266,7 @@ imagesPrefetchCache.getImg=function(url) {
 function showImage(path, size, index) {
     var fullscreen=$("#fullscreen-img");
     fullscreen.empty();
-    console.log("showImage("+path+", "+size+", "+index+")");
+    mylog("showImage("+path+", "+size+", "+index+")");
 
     var basedir=path.substring(0, path.lastIndexOf("/"));
     var thumb=getThumbnailByIndex(index);
@@ -327,10 +323,10 @@ function showImage(path, size, index) {
     }
 
     function doit(img, isFinal) {
-            //~ console.log("doit called: ",isFinal, img.attr("src"));
+            //~ mylog("doit called: ",isFinal, img.attr("src"));
         img.on("error", pressEsc);
         img.on("load", function() { // prevent flickering
-            //~ console.log("load called: ",isFinal, img.attr("src"));
+            //~ mylog("load called: ",isFinal, img.attr("src"));
             // the bigger (final) img or the bigger one not yet displayed,
             // AND it is the one what is currently in the url (could be navigated away)
             if ((isFinal || fullscreen.children().length===0) && (index===parseInt($.bbq.getState("index")) || index==-1)) {
@@ -338,12 +334,10 @@ function showImage(path, size, index) {
                 if (fullscreen.children().length===0 && swipeDirection) {
                     fullscreen.removeClass("slide-fromleft");
                     fullscreen.removeClass("slide-fromright");
-                    var dirCopy=swipeDirection;
-                    swipeDirection=0;
-                    setTimeout(function() {
-                        var what = dirCopy>0 ? "slide-fromright" : "slide-fromleft"
-                        fullscreen.addClass(what);
-                    }, 0);
+                    // trigger reflow, whatever it is :)
+                    void fullscreen.get(0).offsetWidth;
+                    var what = swipeDirection>0 ? "slide-fromright" : "slide-fromleft"
+                    fullscreen.addClass(what);
                 }
                 fullscreen.empty();
                 fullscreen.append(img);
