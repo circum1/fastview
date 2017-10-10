@@ -218,16 +218,17 @@ func resizeImage(dest, src string, size int) bool {
 		src,
 	}
 	var cmd *exec.Cmd
-    var err error
-	if path, err := exec.LookPath("vipsthumbnail"); err==nil {
-        cmd = exec.Command(path, args...)
-        err = cmd.Run()
-        if err == nil {
-            return true
-        }
+    path, err := exec.LookPath("vipsthumbnail")
+    if err != nil {
+        fmt.Printf("Error while resizing: %v\n", err)
+        return false
     }
-    fmt.Printf("Error while resizing: %v", err)
-    return false
+    cmd = exec.Command(path, args...)
+    if err := cmd.Run(); err != nil {
+        fmt.Printf("Error while resizing: %v\n", err)
+        return false
+    }
+    return true
 }
 
 func thumbnailGenerator() {
@@ -284,6 +285,10 @@ func thumbnailGenerator() {
 //
 // If the request points to an image, the image itself is put to the response.
 func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *auth.AuthenticatedRequest) {
+    cp.serveLocalNoAuth(w, &r.Request)
+}
+
+func (cp *LocalFilesystemProvider) serveLocalNoAuth(w http.ResponseWriter, r *http.Request) {
     //~ fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
     cleanedPath := path.Clean(r.URL.Path)
     abspath := cp.Url2Path(cleanedPath)
@@ -295,8 +300,8 @@ func (cp *LocalFilesystemProvider) serveLocal(w http.ResponseWriter, r *auth.Aut
 
     switch inspectFile(abspath) {
     case NOTHING: http.Error(w, "Bad path", http.StatusNotFound)
-    case DIRECTORY: cp.serveDir(cleanedPath, abspath, w, &r.Request)
-    case REGULAR: cp.serveSingleImage(abspath, w, &r.Request)
+    case DIRECTORY: cp.serveDir(cleanedPath, abspath, w, r)
+    case REGULAR: cp.serveSingleImage(abspath, w, r)
     }
 }
 
@@ -358,8 +363,12 @@ func main() {
         }
         cp := LocalFilesystemProvider{val}
         //~ auth := auth.NewDigestAuthenticator(cp.Url, cp.Secret)
-        auth := auth.NewBasicAuthenticator(cp.Url, cp.BasicSecret)
-        http.HandleFunc(val.Url+"/", auth.Wrap(cp.serveLocal))
+        if len(val.Username) != 0 {
+            auth := auth.NewBasicAuthenticator(cp.Url, cp.BasicSecret)
+            http.HandleFunc(val.Url+"/", auth.Wrap(cp.serveLocal))
+        } else {
+            http.HandleFunc(val.Url+"/", cp.serveLocalNoAuth)
+        }
     }
     http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
     http.HandleFunc("/link/", func (w http.ResponseWriter, r *http.Request) {

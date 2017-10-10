@@ -39,9 +39,9 @@ $(document).ready(function() {
 
     // translate swipe events to keyboard events
     // touchAction: auto keeps browser's zoom and pan functionality
-    var hammertime = new Hammer($("#fullscreen-img").get(0), {touchAction: 'auto'});
-    hammertime.get('swipe').set({ direction: Hammer.DIRECTION_ALL });
-    hammertime.on('swipe', function(ev) {
+    var hammer = new Hammer($("#fullscreen-img").get(0));
+    hammer.get('swipe').set({ direction: Hammer.DIRECTION_ALL });
+    hammer.on('swipe', function(ev) {
         if (ev.direction==Hammer.DIRECTION_RIGHT || ev.direction==Hammer.DIRECTION_LEFT) {
             var keycode=ev.direction==Hammer.DIRECTION_RIGHT ? 37 : 39;
             var e = jQuery.Event("keyup");
