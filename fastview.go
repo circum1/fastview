@@ -370,7 +370,7 @@ func main() {
             http.HandleFunc(val.Url+"/", cp.serveLocalNoAuth)
         }
     }
-    http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
+//    http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request) {http.Redirect(w, r, "/site/", http.StatusMovedPermanently)})
     http.HandleFunc("/link/", func (w http.ResponseWriter, r *http.Request) {
         what:="image"
         if r.URL.Path[len(r.URL.Path)-1:]=="/" {
