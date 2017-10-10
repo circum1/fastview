@@ -7,7 +7,7 @@ package main
 import (
     "fmt"
     "net/http"
-    "time"
+    //~ "time"
     //~ "github.com/tonnerre/golang-pretty"
     "path"
     "strings"
@@ -19,7 +19,7 @@ import (
     //~ "crypto/md5"
     "github.com/BurntSushi/toml"
     "github.com/abbot/go-http-auth"
-    //~ "log"
+    "log"
 )
 
 //~ const (
@@ -50,6 +50,7 @@ type Config struct {
 var allowedSizes=[...]int {640,1600}
 
 var config Config
+var logger = log.New(os.Stdout, "", log.LstdFlags)
 
 type Image struct {
     // full URL path (including the source identifier, e.g. localImageBaseDir)
@@ -141,6 +142,7 @@ func (cp *LocalFilesystemProvider) serveDir(urlPath string, fsPath string, w htt
 }
 
 func (cp *LocalFilesystemProvider) serveSingleImage(abspath string, w http.ResponseWriter, r *http.Request) {
+    logger.Printf("serve image %v", abspath)
     sizeStr := r.FormValue("size")
     size, err := strconv.Atoi(sizeStr)
     if err!=nil || len(sizeStr)==0 || sizeStr=="full" || size>allowedSizes[len(allowedSizes)-1] {
@@ -293,7 +295,7 @@ func (cp *LocalFilesystemProvider) serveLocalNoAuth(w http.ResponseWriter, r *ht
     //~ fmt.Printf("serveLocal called: %# v\n", pretty.Formatter(r))
     cleanedPath := path.Clean(r.URL.Path)
     abspath := cp.Url2Path(cleanedPath)
-    fmt.Printf("serveLocal() query: %v\n", r.URL)
+    //~ fmt.Printf("serveLocal() query: %v\n", r.URL)
     if len(abspath)==0 {
         fmt.Fprintf(w, "invalid URL")
         return
@@ -358,9 +360,7 @@ func main() {
     http.HandleFunc("/site/", func (w http.ResponseWriter, r *http.Request) {
         if (strings.HasSuffix(path.Clean(r.URL.Path), "fastview.js")) {
             re := regexp.MustCompile("(.*):[0-9]+$")
-        fmt.Printf("RemoteAddr: %v\n", r.RemoteAddr)
-            fmt.Printf("%v reading fastview.js from %v\n", time.Now().Format("2006-01-02 15:04:05"),
-                re.FindStringSubmatch(r.RemoteAddr)[1])
+            logger.Printf("reading fastview.js from %v", re.FindStringSubmatch(r.RemoteAddr)[1])
         }
         fileserver.ServeHTTP(w, r)
     })
