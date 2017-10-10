@@ -7,10 +7,11 @@ package main
 import (
     "fmt"
     "net/http"
-    //~ "time"
+    "time"
     //~ "github.com/tonnerre/golang-pretty"
     "path"
     "strings"
+    "regexp"
     "os"
     "io/ioutil"
     "os/exec"
@@ -353,7 +354,16 @@ func main() {
     }
 
     go thumbnailGenerator()
-    http.Handle("/site/", http.FileServer(http.Dir(".")))
+    fileserver := http.FileServer(http.Dir("."))
+    http.HandleFunc("/site/", func (w http.ResponseWriter, r *http.Request) {
+        if (strings.HasSuffix(path.Clean(r.URL.Path), "fastview.js")) {
+            re := regexp.MustCompile("(.*):[0-9]+$")
+        fmt.Printf("RemoteAddr: %v\n", r.RemoteAddr)
+            fmt.Printf("%v reading fastview.js from %v\n", time.Now().Format("2006-01-02 15:04:05"),
+                re.FindStringSubmatch(r.RemoteAddr)[1])
+        }
+        fileserver.ServeHTTP(w, r)
+    })
 
     for _, val := range config.LocalDirs {
         fmt.Printf("Serving directory %v under %v\n", val.Rootdir, val.Url)
